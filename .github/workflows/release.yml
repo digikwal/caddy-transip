@@ -1,0 +1,156 @@
+name: release
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_arm:
+        description: "Also build linux/arm64 (enables QEMU)"
+        required: false
+        default: "false"
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image (local)
+        run: docker build -t caddy-transip:ci .
+
+      - name: Test Caddy binary
+        run: docker run --rm caddy-transip:ci version
+
+      - name: Test TransIP module is present
+        run: |
+          set -euo pipefail
+          docker run --rm caddy-transip:ci list-modules | grep -F "dns.providers.transip"
+      - name: Smoke test entrypoint secret handling
+        run: |
+          set -euo pipefail
+          printf 'dummy-key' > /tmp/transip.key
+          docker run --rm \
+            -e TRANSIP_ACCOUNT_NAME="example-account" \
+            -e TRANSIP_PRIVATE_KEY__FILE="/run/secrets/transip.key" \
+            -v /tmp/transip.key:/run/secrets/transip.key:ro \
+            caddy-transip:ci \
+            adapt --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Smoke test entrypoint raw key handling
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e TRANSIP_ACCOUNT_NAME="example-account" \
+            -e TRANSIP_PRIVATE_KEY="dummy-key" \
+            caddy-transip:ci \
+            adapt --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  release:
+    if: github.event_name == 'push'
+    needs: build-test
+    runs-on: ubuntu-latest
+    env:
+      BUILD_ARM: ${{ github.event_name == 'workflow_dispatch' && inputs.build_arm || 'false' }}
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout (full history for semantic-release)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # QEMU is only needed for cross-arch builds (linux/arm64).
+      - name: Set up QEMU
+        if: env.BUILD_ARM == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Compute and publish the next semantic version based on Conventional Commits.
+      - name: Semantic release (Conventional Commits)
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          semantic_version: 24
+          extra_plugins: |
+            @semantic-release/commit-analyzer
+            @semantic-release/release-notes-generator
+            @semantic-release/github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build Docker tags from the released semantic version.
+      - name: Docker metadata (tags + labels)
+        if: steps.semantic.outputs.new_release_published == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=v${{ steps.semantic.outputs.new_release_version }}
+            type=raw,value=v${{ steps.semantic.outputs.new_release_major_version }}
+            type=raw,value=v${{ steps.semantic.outputs.new_release_major_version }}.${{ steps.semantic.outputs.new_release_minor_version }}
+
+      # Default to amd64; opt-in to arm64 to save build time.
+      - name: Build and push image
+        if: steps.semantic.outputs.new_release_published == 'true'
+        id: build-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: ${{ env.BUILD_ARM == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: true
+
+      - name: Install Cosign
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: sigstore/cosign-installer@v3
+
+      # Keyless signing uses GitHub OIDC; no secrets required.
+      - name: Sign image with Cosign (keyless)
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          cosign sign "ghcr.io/${{ github.repository }}@${{ steps.build-push.outputs.digest }}"
+
+      - name: Generate SBOM (Syft)
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/${{ github.repository }}@${{ steps.build-push.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+
+      - name: Upload SBOM artifact
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom.spdx.json
+          path: sbom.spdx.json
+
+      - name: Vulnerability scan (Grype)
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: anchore/scan-action@v6
+        with:
+          image: ghcr.io/${{ github.repository }}@${{ steps.build-push.outputs.digest }}
+          severity-cutoff: critical
+          fail-build: true
