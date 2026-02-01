@@ -1,6 +1,6 @@
 # Caddy + TransIP DNS-01 (custom build)
 
-This repository builds a **custom Caddy v2** image with the `dns.providers.transip` module included. The module source is `github.com/caddy-dns/transip` (the Caddy DNS modules org), pinned to commit `55a5d2e` because the module does not publish tagged releases. This keeps builds reproducible while using the Caddy DNS modules namespace.
+This repository builds a **custom Caddy v2** image with the `dns.providers.transip` module included. The module source is `github.com/caddy-dns/transip` (the Caddy DNS modules org), pinned to `v2.0.1` for reproducibility.
 
 ## How TransIP DNS-01 works
 
@@ -11,7 +11,7 @@ For DNS-01 challenges, Caddy asks the ACME CA for a token, then creates a TXT re
 The Caddyfile reads credentials from environment variables (the entrypoint supports both raw keys and Docker-style `__FILE` secrets):
 
 - `TRANSIP_ACCOUNT_NAME`: your TransIP login / account name.
-- `TRANSIP_PRIVATE_KEY`: the private key value used by the TransIP API (raw content).
+- `TRANSIP_PRIVATE_KEY`: either raw private key content or a path to a key file.
 - `TRANSIP_PRIVATE_KEY__FILE`: path to a file containing the private key.
 
 Tip: if you keep the key in a file, you can pass the path with `TRANSIP_PRIVATE_KEY__FILE`, or export the file contents before starting the container:
@@ -20,10 +20,11 @@ Tip: if you keep the key in a file, you can pass the path with `TRANSIP_PRIVATE_
 export TRANSIP_PRIVATE_KEY="$(cat /path/to/transip.key)"
 ```
 
-The entrypoint normalizes credentials into `TRANSIP_PRIVATE_KEY_PATH` for Caddy:
+The entrypoint normalizes credentials into `TRANSIP_PRIVATE_KEY` for Caddy:
 
-- If `TRANSIP_PRIVATE_KEY` is set, it writes `/tmp/transip.key` (mode 0600) and points Caddy to that file.
 - If `TRANSIP_PRIVATE_KEY__FILE` is set, it points Caddy to that file path.
+- If `TRANSIP_PRIVATE_KEY` points to an existing file, that path is used directly.
+- If `TRANSIP_PRIVATE_KEY` contains raw key content, it writes `/tmp/transip.key` (mode 0600) and points Caddy to that file.
 
 ## Default Caddyfile example
 
@@ -32,7 +33,7 @@ The included `Caddyfile` is a minimal wildcard example:
 ```
 *.example.nl {
   tls {
-    dns transip {env.TRANSIP_ACCOUNT_NAME} {env.TRANSIP_PRIVATE_KEY_PATH}
+    dns transip {env.TRANSIP_ACCOUNT_NAME} {env.TRANSIP_PRIVATE_KEY}
   }
   respond "ok"
 }

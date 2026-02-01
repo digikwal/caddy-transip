@@ -1,6 +1,6 @@
 *.example.nl {
   tls {
-    dns transip {env.TRANSIP_ACCOUNT_NAME} {env.TRANSIP_PRIVATE_KEY_PATH}
+    dns transip {env.TRANSIP_ACCOUNT_NAME} {env.TRANSIP_PRIVATE_KEY}
   }
   respond "ok"
 }

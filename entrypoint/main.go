@@ -12,7 +12,6 @@ const (
 	envAccountName       = "TRANSIP_ACCOUNT_NAME"
 	envPrivateKey        = "TRANSIP_PRIVATE_KEY"
 	envPrivateKeyFile    = "TRANSIP_PRIVATE_KEY__FILE"
-	envPrivateKeyPath    = "TRANSIP_PRIVATE_KEY_PATH"
 	defaultPrivateKeyOut = "/tmp/transip.key"
 )
 
@@ -23,13 +22,10 @@ func main() {
 	}
 
 	if privateKeyPath != "" {
-		if err := os.Setenv(envPrivateKeyPath, privateKeyPath); err != nil {
-			fail(fmt.Errorf("set %s: %w", envPrivateKeyPath, err))
+		if err := os.Setenv(envPrivateKey, privateKeyPath); err != nil {
+			fail(fmt.Errorf("set %s: %w", envPrivateKey, err))
 		}
 	}
-
-	// Avoid leaking secrets by clearing the raw key value if it was provided.
-	_ = os.Unsetenv(envPrivateKey)
 
 	if len(os.Args) < 2 {
 		fail(fmt.Errorf("missing caddy command"))
@@ -49,9 +45,7 @@ func resolvePrivateKeyPath() (string, error) {
 	accountName := os.Getenv(envAccountName)
 	rawKey := os.Getenv(envPrivateKey)
 	filePath := os.Getenv(envPrivateKeyFile)
-	path := os.Getenv(envPrivateKeyPath)
-
-	if accountName == "" && rawKey == "" && filePath == "" && path == "" {
+	if accountName == "" && rawKey == "" && filePath == "" {
 		return "", nil
 	}
 
@@ -59,7 +53,15 @@ func resolvePrivateKeyPath() (string, error) {
 		return "", fmt.Errorf("%s is required when using TransIP DNS", envAccountName)
 	}
 
+	if filePath != "" {
+		return filepath.Clean(filePath), nil
+	}
+
 	if rawKey != "" {
+		if isFile(rawKey) {
+			return filepath.Clean(rawKey), nil
+		}
+
 		path := defaultPrivateKeyOut
 		if err := os.WriteFile(path, []byte(rawKey), 0o600); err != nil {
 			return "", fmt.Errorf("write %s: %w", path, err)
@@ -67,19 +69,19 @@ func resolvePrivateKeyPath() (string, error) {
 		return path, nil
 	}
 
-	if filePath != "" {
-		return filepath.Clean(filePath), nil
-	}
-
-	if path != "" {
-		return filepath.Clean(path), nil
-	}
-
 	return "", fmt.Errorf("set %s or %s", envPrivateKey, envPrivateKeyFile)
 }
 
 func execCmd(cmd string, args []string) error {
 	return syscall.Exec(cmd, append([]string{cmd}, args...), os.Environ())
+}
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode().IsRegular()
 }
 
 func fail(err error) {

@@ -3,7 +3,7 @@
 # Pinned versions for reproducible builds. Update intentionally.
 ARG CADDY_VERSION=2.10.2
 # The TransIP module currently has no tagged releases; pin to a commit.
-ARG TRANSIP_MODULE_VERSION=55a5d2e
+ARG TRANSIP_MODULE_VERSION=v2.0.1
 
 FROM caddy:${CADDY_VERSION}-builder AS builder
 
