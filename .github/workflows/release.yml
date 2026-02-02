@@ -152,6 +152,7 @@ jobs:
         if: steps.semantic.outputs.new_release_published == 'true'
         id: grype
         uses: anchore/scan-action@v6
+        continue-on-error: true
         with:
           image: ghcr.io/${{ github.repository }}@${{ steps.build-push.outputs.digest }}
           output-format: sarif
@@ -162,8 +163,14 @@ jobs:
           only-fixed: false
 
       - name: Upload Grype SARIF artifact
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: steps.semantic.outputs.new_release_published == 'true' && always()
         uses: actions/upload-artifact@v4
         with:
           name: grype.sarif
           path: grype.sarif
+
+      - name: Fail if vulnerabilities are critical
+        if: steps.semantic.outputs.new_release_published == 'true' && steps.grype.outcome == 'failure'
+        run: |
+          echo "Grype reported critical vulnerabilities."
+          exit 1
