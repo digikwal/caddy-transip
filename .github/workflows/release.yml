@@ -150,8 +150,20 @@ jobs:
 
       - name: Vulnerability scan (Grype)
         if: steps.semantic.outputs.new_release_published == 'true'
+        id: grype
         uses: anchore/scan-action@v6
         with:
           image: ghcr.io/${{ github.repository }}@${{ steps.build-push.outputs.digest }}
+          output-format: sarif
+          output-file: grype.sarif
           severity-cutoff: critical
           fail-build: true
+          add-cpes-if-none: true
+          only-fixed: false
+
+      - name: Upload Grype SARIF artifact
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype.sarif
+          path: grype.sarif
