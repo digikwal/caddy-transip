@@ -13,8 +13,13 @@ ARG TRANSIP_MODULE_VERSION
 
 # Build a static Caddy binary with the TransIP DNS module.
 ENV CGO_ENABLED=0
+# Security overrides for known vulnerable transitive deps (see CI Grype report).
 RUN xcaddy build \
     --with github.com/caddy-dns/transip@${TRANSIP_MODULE_VERSION} \
+    --replace github.com/smallstep/certificates=github.com/smallstep/certificates@v0.29.0 \
+    --replace github.com/quic-go/quic-go=github.com/quic-go/quic-go@v0.57.0 \
+    --replace golang.org/x/crypto=golang.org/x/crypto@v0.45.0 \
+    --replace github.com/slackhq/nebula=github.com/slackhq/nebula@v1.9.7 \
     --output /usr/bin/caddy
 
 # Build a tiny entrypoint that supports TRANSIP_PRIVATE_KEY or TRANSIP_PRIVATE_KEY__FILE.

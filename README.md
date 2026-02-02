@@ -107,4 +107,5 @@ volumes:
 ## Notes
 
 - This is a **custom Caddy build** (not the upstream image) to include `dns.providers.transip`.
+- The Docker build applies `xcaddy --replace` overrides to patch known vulnerable transitive dependencies detected by CI.
 - Caddy runs with: `caddy run --config /etc/caddy/Caddyfile --adapter caddyfile`.
