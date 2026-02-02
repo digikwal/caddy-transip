@@ -3,8 +3,9 @@
 # Pinned versions for reproducible builds. Update intentionally.
 ARG CADDY_VERSION=2.10.2
 # The TransIP module currently has no tagged releases; pin to a commit.
-# The TransIP module release tags are currently without a "v" prefix.
-ARG TRANSIP_MODULE_VERSION=2.0.1
+# The TransIP module uses non-Go-module release tags (e.g. "2.0.1"),
+# so we pin to the tag's commit for reproducible Go module resolution.
+ARG TRANSIP_MODULE_VERSION=2a8fd975eb91
 
 FROM caddy:${CADDY_VERSION}-builder AS builder
 
