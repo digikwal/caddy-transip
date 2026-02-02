@@ -1,6 +1,6 @@
 # Caddy + TransIP DNS-01 (custom build)
 
-This repository builds a **custom Caddy v2** image with the `dns.providers.transip` module included. The module source is `github.com/caddy-dns/transip` (the Caddy DNS modules org), pinned to `v2.0.1` for reproducibility.
+This repository builds a **custom Caddy v2** image with the `dns.providers.transip` module included. The module source is `github.com/caddy-dns/transip` (the Caddy DNS modules org), pinned to `2.0.1` for reproducibility.
 
 ## How TransIP DNS-01 works
 
