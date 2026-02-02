@@ -1,4 +1,4 @@
-*.example.nl {
+*.example.com {
   tls {
     dns transip {env.TRANSIP_ACCOUNT_NAME} {env.TRANSIP_PRIVATE_KEY}
   }
